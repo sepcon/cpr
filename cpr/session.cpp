@@ -37,6 +37,7 @@ class Session::Impl {
     void SetBody(const Body& body);
     void SetLowSpeed(const LowSpeed& low_speed);
     void SetVerbose(const Verbose& verbose);
+    void SetResponseDataStream(const ResponseDataStream& contentStream);
     void SetVerifySsl(const VerifySsl& verify);
 
     Response Delete();
@@ -52,6 +53,7 @@ class Session::Impl {
     Url url_;
     Parameters parameters_;
     Proxies proxies_;
+    ResponseDataStream responseDataStream_;
 
     Response makeRequest(CURL* curl);
     static void freeHolder(CurlHolder* holder);
@@ -154,6 +156,14 @@ void Session::Impl::SetVerbose(const Verbose& verbose) {
     auto curl = curl_->handle;
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_VERBOSE, verbose.verbose);
+    }
+}
+
+void Session::Impl::SetResponseDataStream(const ResponseDataStream& contentStream) {
+    auto curl = curl_->handle;
+    if(curl) {
+        responseDataStream_ = contentStream;
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, responseDataStream_);
     }
 }
 
@@ -411,11 +421,15 @@ Response Session::Impl::makeRequest(CURL* curl) {
 
     curl_->error[0] = '\0';
 
-    std::string response_string;
-    std::string header_string;
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, cpr::util::writeFunction);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_string);
+    std::ostringstream headerStringStream;
+    std::ostringstream stringContentStream;
+
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headerStringStream);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, util::writeFunction);
+
+    if(responseDataStream_.IsNull()) {
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stringContentStream);
+    }
 
     auto curl_error = curl_easy_perform(curl);
 
@@ -438,8 +452,8 @@ Response Session::Impl::makeRequest(CURL* curl) {
     curl_slist_free_all(raw_cookies);
 
     return Response{static_cast<std::int32_t>(response_code),
-                    std::move(response_string),
-                    cpr::util::parseHeader(header_string),
+                    stringContentStream.str(),
+                    cpr::util::parseHeader(headerStringStream.str()),
                     std::move(raw_url),
                     elapsed,
                     std::move(cookies),
@@ -494,6 +508,7 @@ void Session::SetOption(Body&& body) { pimpl_->SetBody(std::move(body)); }
 void Session::SetOption(const LowSpeed& low_speed) { pimpl_->SetLowSpeed(low_speed); }
 void Session::SetOption(const VerifySsl& verify) { pimpl_->SetVerifySsl(verify); }
 void Session::SetOption(const Verbose& verbose) { pimpl_->SetVerbose(verbose); }
+void Session::SetOption(const ResponseDataStream& contentStream) { pimpl_->SetResponseDataStream(contentStream); }
 Response Session::Delete() { return pimpl_->Delete(); }
 Response Session::Get() { return pimpl_->Get(); }
 Response Session::Head() { return pimpl_->Head(); }

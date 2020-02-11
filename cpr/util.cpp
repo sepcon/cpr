@@ -53,8 +53,8 @@ std::vector<std::string> split(const std::string& to_split, char delimiter) {
     return tokens;
 }
 
-size_t writeFunction(void* ptr, size_t size, size_t nmemb, std::string* data) {
-    data->append(static_cast<char*>(ptr), size * nmemb);
+size_t writeFunction(void* ptr, size_t size, size_t nmemb, std::ostream* stream) {
+    stream->write(reinterpret_cast<const char*>(ptr), size * nmemb);
     return size * nmemb;
 }
 
